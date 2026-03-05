@@ -1,116 +1,61 @@
+# app.py
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-from datetime import datetime
+from calc import calculer_couverture
 
-# Configuration de la page
-st.set_page_config(
-    page_title="SAFE-OUT | Gestion de Sorties",
-    page_icon="🛡️",
-    layout="wide"
+# Configuration Look & Feel
+st.set_page_config(page_title="Le Sniper de Cashout", page_icon="🎯", layout="centered")
+
+st.title("🎯 Le Sniper de Cashout")
+st.markdown("### Ne laissez plus les bookmakers voler vos gains.")
+
+# --- SIDEBAR : INPUTS ---
+st.sidebar.header("📋 Votre Ticket")
+gain_pot = st.sidebar.number_input("Gain potentiel du combiné (€)", min_value=1.0, value=500.0, step=10.0)
+mise_init = st.sidebar.number_input("Mise initiale déjà placée (€)", min_value=1.0, value=20.0, step=5.0)
+cote_couv = st.sidebar.number_input("Cote de l'issue inverse (Couverture)", min_value=1.01, value=2.10, step=0.05)
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Stratégie")
+strat = st.sidebar.selectbox(
+    "Que voulez-vous sécuriser ?",
+    ["Gain Global (Sécurité Totale)", "Mise Uniquement (Breakeven)", "Mise + % de Profit"]
 )
 
-# --- STYLE CSS PERSONNALISÉ ---
-# Correction de l'erreur : l'argument correct est unsafe_allow_html=True
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #007bff;
-        color: white;
-    }
-    .status-card {
-        padding: 20px;
-        border-radius: 10px;
-        background-color: white;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        text-align: center;
-        border: 1px solid #eee;
-        margin-bottom: 10px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+pct = 0
+if strat == "Mise + % de Profit":
+    pct = st.sidebar.slider("% du profit à garantir", 0, 100, 50)
 
-# --- INITIALISATION DES DONNÉES (Session State) ---
-if 'check_ins' not in st.session_state:
-    st.session_state.check_ins = []
+# --- CALCULS ---
+mise_a_placer, erreur = calculer_couverture(gain_pot, mise_init, cote_couv, strat, pct)
 
-# --- SIDEBAR (Navigation) ---
-st.sidebar.title("🛡️ SAFE-OUT")
-menu = st.sidebar.radio("Navigation", ["Tableau de bord", "Nouvelle Sortie", "Historique"])
+if erreur:
+    st.error(erreur)
+else:
+    # Analyse des résultats
+    total_investi = mise_init + mise_a_placer
+    benefice_si_couv = (mise_a_placer * cote_couv) - total_investi
+    benefice_si_combine = gain_pot - total_investi
 
-# --- TITRE PRINCIPAL ---
-st.title("Système de Sécurité SAFE-OUT")
-
-if menu == "Tableau de bord":
-    st.subheader("État actuel de la sécurité")
-    
-    # Indicateurs rapides
-    col1, col2, col3 = st.columns(3)
+    # --- AFFICHAGE DES RÉSULTATS ---
+    st.markdown("---")
+    col1, col2 = st.columns(2)
     
     with col1:
-        actives = len([x for x in st.session_state.check_ins if x['status'] == 'En cours'])
-        st.markdown(f'<div class="status-card"><h4>Sorties Actives</h4><h2 style="color:#007bff">{actives}</h2></div>', unsafe_allow_html=True)
-        
+        st.metric(label="🎯 MISE À PLACER", value=f"{mise_a_placer} €")
+        st.caption(f"Sur la cote de {cote_couv}")
+
     with col2:
-        st.markdown('<div class="status-card"><h4>Alertes</h4><h2 style="color:red">0</h2></div>', unsafe_allow_html=True)
-        
-    with col3:
-        st.markdown('<div class="status-card"><h4>Dernier Check-in</h4><p>--:--</p></div>', unsafe_allow_html=True)
+        benefice_moyen = (benefice_si_couv + benefice_si_combine) / 2
+        st.metric(label="💰 BÉNÉFICE ESTIMÉ", value=f"{benefice_moyen:.2f} €")
 
-    # Graphique d'activité
-    if st.session_state.check_ins:
-        df = pd.DataFrame(st.session_state.check_ins)
-        fig = px.timeline(df, x_start="Heure Départ", x_end="Heure Retour", y="Destination", color="status", title="Planning des sorties")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Aucune donnée d'activité pour le moment. Commencez par créer une sortie dans le menu 'Nouvelle Sortie' !")
+    # Tableau récapitulatif
+    st.markdown("#### Détails des scénarios")
+    st.table({
+        "Scénario": ["Le combiné passe", "La couverture passe"],
+        "Gain Brut": [f"{gain_pot:.2f} €", f"{mise_a_placer * cote_couv:.2f} €"],
+        "Frais (Mises)": [f"-{total_investi:.2f} €", f"-{total_investi:.2f} €"],
+        "Bénéfice Net": [f"{benefice_si_combine:.2f} €", f"{benefice_si_couv:.2f} €"]
+    })
 
-elif menu == "Nouvelle Sortie":
-    st.subheader("Enregistrer une nouvelle sortie")
-    
-    with st.form("sortie_form"):
-        dest = st.text_input("Destination / Activité", placeholder="Ex: Randonnée Col du Chat")
-        col_t1, col_t2 = st.columns(2)
-        h_dep = col_t1.time_input("Heure de départ", datetime.now().time())
-        h_ret = col_t2.time_input("Heure de retour prévue (Alerte)", datetime.now().time())
-        contact = st.text_input("Contact d'urgence", value="06 00 00 00 00")
-        note = st.text_area("Notes supplémentaires (itinéraire, équipement...)")
-        
-        submit = st.form_submit_button("Activer la surveillance")
-        
-        if submit:
-            if dest:
-                new_entry = {
-                    "Destination": dest,
-                    "Heure Départ": datetime.combine(datetime.today(), h_dep),
-                    "Heure Retour": datetime.combine(datetime.today(), h_ret),
-                    "Contact": contact,
-                    "Notes": note,
-                    "status": "En cours"
-                }
-                st.session_state.check_ins.append(new_entry)
-                st.success(f"Surveillance activée pour {dest} ! Retour prévu à {h_ret.strftime('%H:%M')}")
-            else:
-                st.error("Veuillez entrer une destination.")
-
-elif menu == "Historique":
-    st.subheader("Historique des activités")
-    if st.session_state.check_ins:
-        df_hist = pd.DataFrame(st.session_state.check_ins)
-        # On formate les dates pour l'affichage
-        df_display = df_hist.copy()
-        df_display['Heure Départ'] = df_display['Heure Départ'].dt.strftime('%H:%M')
-        df_display['Heure Retour'] = df_display['Heure Retour'].dt.strftime('%H:%M')
-        st.dataframe(df_display, use_container_width=True)
-    else:
-        st.write("L'historique est vide.")
-
-# Pied de page
-st.sidebar.markdown("---")
-st.sidebar.caption("Interface synchronisée via GitHub.")
+    # Message Marketing "Anti-Arnaque"
+    st.warning(f"💡 **Conseil du Sniper** : Si le bookmaker vous propose moins de **{total_investi + (benefice_moyen * 0.8):.2f} €** en Cash-out, ignorez-les et utilisez cette méthode !")
