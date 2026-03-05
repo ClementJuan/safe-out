@@ -2,15 +2,16 @@
 import streamlit as st
 from calc import calculer_couverture
 
-# Configuration Look & Feel
-st.set_page_config(page_title="Le Sniper de Cashout", page_icon="🎯", layout="centered")
+# Configuration
+st.set_page_config(page_title="Safe-Out", page_icon="🛡️", layout="centered")
 
-st.title("🎯 Le Sniper de Cashout")
-st.markdown("### Ne laissez plus les bookmakers voler vos gains.")
+st.title("🛡️ Safe-Out")
+st.subheader("Le Sniper du Cash-out Optimal")
+st.markdown("---")
 
-# --- SIDEBAR : INPUTS ---
+# --- SIDEBAR : PARAMÈTRES ---
 st.sidebar.header("📋 Votre Ticket")
-gain_pot = st.sidebar.number_input("Gain potentiel du combiné (€)", min_value=1.0, value=500.0, step=10.0)
+gain_pot = st.sidebar.number_input("Gain potentiel du ticket (€)", min_value=1.0, value=500.0, step=10.0)
 mise_init = st.sidebar.number_input("Mise initiale déjà placée (€)", min_value=1.0, value=20.0, step=5.0)
 cote_couv = st.sidebar.number_input("Cote de l'issue inverse (Couverture)", min_value=1.01, value=2.10, step=0.05)
 
@@ -25,37 +26,44 @@ pct = 0
 if strat == "Mise + % de Profit":
     pct = st.sidebar.slider("% du profit à garantir", 0, 100, 50)
 
-# --- CALCULS ---
-mise_a_placer, erreur = calculer_couverture(gain_pot, mise_init, cote_couv, strat, pct)
+st.sidebar.markdown("---")
+st.sidebar.header("🏦 Comparatif Bookmaker")
+offre_cashout = st.sidebar.number_input("Montant Cash-out proposé (€)", min_value=0.0, value=0.0)
+
+# --- CALCULS ET RÉSULTATS ---
+resultat, erreur = calculer_couverture(gain_pot, mise_init, cote_couv, strat, pct)
 
 if erreur:
     st.error(erreur)
-else:
-    # Analyse des résultats
-    total_investi = mise_init + mise_a_placer
-    benefice_si_couv = (mise_a_placer * cote_couv) - total_investi
-    benefice_si_combine = gain_pot - total_investi
-
-    # --- AFFICHAGE DES RÉSULTATS ---
-    st.markdown("---")
+elif resultat:
+    # Affichage des métriques principales
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.metric(label="🎯 MISE À PLACER", value=f"{mise_a_placer} €")
-        st.caption(f"Sur la cote de {cote_couv}")
-
+        st.metric(label="🎯 MISE À PLACER SUR L'ADVERSAIRE", value=f"{resultat['mise_a_placer']} €")
     with col2:
-        benefice_moyen = (benefice_si_couv + benefice_si_combine) / 2
-        st.metric(label="💰 BÉNÉFICE ESTIMÉ", value=f"{benefice_moyen:.2f} €")
+        st.metric(label="💰 BÉNÉFICE NET ESTIMÉ", value=f"{resultat['benef_moyen']} €")
 
-    # Tableau récapitulatif
-    st.markdown("#### Détails des scénarios")
-    st.table({
-        "Scénario": ["Le combiné passe", "La couverture passe"],
-        "Gain Brut": [f"{gain_pot:.2f} €", f"{mise_a_placer * cote_couv:.2f} €"],
-        "Frais (Mises)": [f"-{total_investi:.2f} €", f"-{total_investi:.2f} €"],
-        "Bénéfice Net": [f"{benefice_si_combine:.2f} €", f"{benefice_si_couv:.2f} €"]
-    })
+    # --- VERDICT COMPARATIF ---
+    if offre_cashout > 0:
+        gain_reel_cashout = offre_cashout - mise_init
+        difference = resultat['benef_moyen'] - gain_reel_cashout
+        
+        st.markdown("### 📢 Verdict Safe-Out")
+        if difference > 0:
+            st.success(f"✅ **Faites la manipulation manuellement !**")
+            st.write(f"En utilisant Safe-Out, vous gagnez **{difference:.2f} € de plus** que le bouton Cash-out.")
+            st.caption(f"Le bookmaker tente de vous prendre une commission de {((difference/offre_cashout)*100):.1f}% sur ce rachat.")
+        else:
+            st.error(f"⚠️ **Le Cash-out est avantageux.**")
+            st.write(f"Exceptionnellement, l'offre du bookmaker est meilleure de {abs(difference):.2f} €. Cliquez sur leur bouton.")
 
-    # Message Marketing "Anti-Arnaque"
-    st.warning(f"💡 **Conseil du Sniper** : Si le bookmaker vous propose moins de **{total_investi + (benefice_moyen * 0.8):.2f} €** en Cash-out, ignorez-les et utilisez cette méthode !")
+    # --- SCÉNARIOS ---
+    with st.expander("Voir le détail des scénarios"):
+        st.table({
+            "Issue": ["Le combiné passe", "La couverture passe"],
+            "Bénéfice Net": [f"{resultat['benef_si_combine']} €", f"{resultat['benef_si_couv']} €"]
+        })
+        st.info(f"Investissement total (Mise init + Couverture) : {resultat['total_investi']} €")
+
+st.markdown("---")
+st.caption("Safe-Out : Reprenez le contrôle sur vos paris.")
