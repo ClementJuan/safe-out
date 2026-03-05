@@ -11,6 +11,7 @@ st.set_page_config(
 )
 
 # --- STYLE CSS PERSONNALISÉ ---
+# Correction de l'erreur : l'argument correct est unsafe_allow_html=True
 st.markdown("""
     <style>
     .main {
@@ -29,9 +30,11 @@ st.markdown("""
         background-color: white;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         text-align: center;
+        border: 1px solid #eee;
+        margin-bottom: 10px;
     }
     </style>
-    """, unsafe_allow_value=True)
+    """, unsafe_allow_html=True)
 
 # --- INITIALISATION DES DONNÉES (Session State) ---
 if 'check_ins' not in st.session_state:
@@ -51,9 +54,8 @@ if menu == "Tableau de bord":
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown('<div class="status-card"><h4>Sorties Actives</h4><h2>{}</h2></div>'.format(
-            len([x for x in st.session_state.check_ins if x['status'] == 'En cours'])
-        ), unsafe_allow_html=True)
+        actives = len([x for x in st.session_state.check_ins if x['status'] == 'En cours'])
+        st.markdown(f'<div class="status-card"><h4>Sorties Actives</h4><h2 style="color:#007bff">{actives}</h2></div>', unsafe_allow_html=True)
         
     with col2:
         st.markdown('<div class="status-card"><h4>Alertes</h4><h2 style="color:red">0</h2></div>', unsafe_allow_html=True)
@@ -61,13 +63,13 @@ if menu == "Tableau de bord":
     with col3:
         st.markdown('<div class="status-card"><h4>Dernier Check-in</h4><p>--:--</p></div>', unsafe_allow_html=True)
 
-    # Graphique d'activité (Mockup)
+    # Graphique d'activité
     if st.session_state.check_ins:
         df = pd.DataFrame(st.session_state.check_ins)
-        fig = px.timeline(df, x_start="Heure Départ", x_end="Heure Retour", y="Destination", color="status")
+        fig = px.timeline(df, x_start="Heure Départ", x_end="Heure Retour", y="Destination", color="status", title="Planning des sorties")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Aucune donnée d'activité pour le moment. Commencez par créer une sortie !")
+        st.info("Aucune donnée d'activité pour le moment. Commencez par créer une sortie dans le menu 'Nouvelle Sortie' !")
 
 elif menu == "Nouvelle Sortie":
     st.subheader("Enregistrer une nouvelle sortie")
@@ -83,25 +85,32 @@ elif menu == "Nouvelle Sortie":
         submit = st.form_submit_button("Activer la surveillance")
         
         if submit:
-            new_entry = {
-                "Destination": dest,
-                "Heure Départ": datetime.combine(datetime.today(), h_dep),
-                "Heure Retour": datetime.combine(datetime.today(), h_ret),
-                "Contact": contact,
-                "Notes": note,
-                "status": "En cours"
-            }
-            st.session_state.check_ins.append(new_entry)
-            st.success(f"Surveillance activée pour {dest} ! Retour prévu à {h_ret}")
+            if dest:
+                new_entry = {
+                    "Destination": dest,
+                    "Heure Départ": datetime.combine(datetime.today(), h_dep),
+                    "Heure Retour": datetime.combine(datetime.today(), h_ret),
+                    "Contact": contact,
+                    "Notes": note,
+                    "status": "En cours"
+                }
+                st.session_state.check_ins.append(new_entry)
+                st.success(f"Surveillance activée pour {dest} ! Retour prévu à {h_ret.strftime('%H:%M')}")
+            else:
+                st.error("Veuillez entrer une destination.")
 
 elif menu == "Historique":
     st.subheader("Historique des activités")
     if st.session_state.check_ins:
         df_hist = pd.DataFrame(st.session_state.check_ins)
-        st.table(df_hist)
+        # On formate les dates pour l'affichage
+        df_display = df_hist.copy()
+        df_display['Heure Départ'] = df_display['Heure Départ'].dt.strftime('%H:%M')
+        df_display['Heure Retour'] = df_display['Heure Retour'].dt.strftime('%H:%M')
+        st.dataframe(df_display, use_container_width=True)
     else:
         st.write("L'historique est vide.")
 
 # Pied de page
 st.sidebar.markdown("---")
-st.sidebar.caption("Interface synchronisée via GitHub. Disponible sur tous vos appareils.")
+st.sidebar.caption("Interface synchronisée via GitHub.")
